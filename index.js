@@ -6,6 +6,16 @@ const qrcode = require('qrcode-terminal');
 const app = express();
 app.use(express.json());
 
+const { exec } = require("child_process");
+
+exec("bash install-chromium.sh", (error, stdout, stderr) => {
+  if (error) {
+    console.error(`Error installing Chromium: ${error.message}`);
+    return;
+  }
+  console.log(`Chromium installed: ${stdout}`);
+});
+
 // Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth()
