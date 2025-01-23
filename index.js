@@ -4,11 +4,15 @@ const qrcode = require('qrcode-terminal');
 
 // Initialize Express
 const app = express();
-app.use(express.json());
+app.use(express.json());6
 
 // Initialize WhatsApp client
 const client = new Client({
-    authStrategy: new LocalAuth()
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        executablePath: '/usr/bin/chromium-browser',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
 });
 
 // Generate QR code for WhatsApp Web authentication
