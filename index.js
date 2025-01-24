@@ -9,10 +9,10 @@ app.use(express.json());6
 // Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
-    // puppeteer: {
-    //     executablePath: '/usr/bin/chromium-browser',
-    //     args: ['--no-sandbox', '--disable-setuid-sandbox']
-    // }
+    puppeteer: {
+        executablePath: '/usr/bin/chromium-browser',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
 });
 
 // Generate QR code for WhatsApp Web authentication
