@@ -1,4 +1,11 @@
 const express = require('express');
+const { Client,LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+// const cors = require('cors');
+// const app = express();
+// Initialize Express
+// const app = express();
+// const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const app = express();
@@ -18,6 +25,7 @@ app.use((req, res, next) => {
     console.log('Request body:', req.body);
     next();
 });
+
 // Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
