@@ -9,10 +9,10 @@ app.use(express.json());6
 // Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: {
-        executablePath: '/usr/bin/chromium-browser',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+    // puppeteer: {
+    //     executablePath: '/usr/bin/chromium-browser',
+    //     args: ['--no-sandbox', '--disable-setuid-sandbox']
+    // }
 });
 
 // Generate QR code for WhatsApp Web authentication
@@ -121,6 +121,67 @@ app.post('/send-otp', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to send OTP',
+            error: error.message
+        });
+    }
+});
+
+// New route to send marathon information message
+app.post('/send-marathon-message', async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+
+        // Validate request body
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'Phone number is required'
+            });
+        }
+
+        // Check if number exists on WhatsApp
+        const exists = await isWhatsAppUser(phoneNumber);
+        if (!exists) {
+            return res.status(400).json({
+                success: false,
+                message: 'This number is not registered on WhatsApp'
+            });
+        }
+
+        // Format phone number
+        let formattedNumber = phoneNumber;
+        if (!phoneNumber.includes('@c.us')) {
+            formattedNumber = `${phoneNumber}@c.us`;
+        }
+
+        // Marathon message
+        const message = `🏃‍♂🌟 अबूझमाड़ मैराथन में आपका स्वागत है! 🌟🏃‍♀
+अबूझमाड़ मैराथन के सभी अपडेट्स, घोषणाएं और यादगार पलों से जुड़े रहने के लिए हमें सोशल मीडिया पर फॉलो करें:
+📸 Instagram: [https://tinyurl.com/6re5awzx]
+👍 Facebook: [https://tinyurl.com/yc8mmmnr]
+🐦 X (Twitter): [https://tinyurl.com/788x6zjj]
+💬 WhatsApp ग्रुप: [https://tinyurl.com/2rzznut2]
+🌐 वेबसाइट: https://www.runabhujhmad.in/
+📧 ईमेल: support@runabujhmad.in
+आइए साथ मिलकर इस मैराथन को यादगार बनाएं! 🌟
+किसी भी जानकारी के लिए हमारी वेबसाइट पर जाएं या हमें ईमेल करें।
+"आओ मिलकर उठाए ये कदम, अबूझमाड को जोड़े हमारे संग"! 🏃‍♂🌟
+#अबूझमाड़मैराथन #RunAbhujhmad #साथचलेंगे #बेहतरकलकेलिए`;
+
+        // Send message
+        const response = await client.sendMessage(formattedNumber, message);
+
+        res.status(200).json({
+            success: true,
+            message: 'Marathon information sent successfully',
+            messageId: response.id
+        });
+
+    } catch (error) {
+        console.error('Error sending marathon message:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send marathon message',
             error: error.message
         });
     }
