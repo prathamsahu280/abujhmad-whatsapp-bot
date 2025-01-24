@@ -1,10 +1,15 @@
 const express = require('express');
 const { Client,LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-
-// Initialize Express
+const cors = require('cors');
 const app = express();
-app.use(express.json());6
+// Initialize Express
+// const app = express();
+app.use(cors({
+    origin: '*', // Be more specific in production
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
 
 // Initialize WhatsApp client
 const client = new Client({
