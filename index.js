@@ -1,16 +1,23 @@
 const express = require('express');
-const { Client,LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const bodyParser = require('body-parser');
 const cors = require('cors');
 const app = express();
-// Initialize Express
-// const app = express();
+
+// Add body parsing middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
 app.use(cors({
     origin: '*', // Be more specific in production
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
-  }));
+}));
 
+// Add logging middleware to debug request body
+app.use((req, res, next) => {
+    console.log('Request body:', req.body);
+    next();
+});
 // Initialize WhatsApp client
 const client = new Client({
     authStrategy: new LocalAuth(),
