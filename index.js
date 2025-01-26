@@ -1,13 +1,12 @@
 const express = require('express');
-const { Client,LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-// const cors = require('cors');
-// const app = express();
-// Initialize Express
-// const app = express();
-// const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const https = require('https');
+const fs = require('fs');
+
+// Initialize Express
 const app = express();
 
 // Add body parsing middleware
@@ -207,8 +206,14 @@ app.post('/send-marathon-message', async (req, res) => {
     }
 });
 
-// Start server
+// SSL Certificate Options
+const options = {
+    key: fs.readFileSync('server.key'),
+    cert: fs.readFileSync('server.crt')
+};
+
+// Start HTTPS server
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+https.createServer(options, app).listen(PORT, () => {
+    console.log(`HTTPS Server running on port ${PORT}`);
 });
