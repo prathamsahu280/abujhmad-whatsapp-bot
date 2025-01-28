@@ -183,9 +183,9 @@ app.post('/send-marathon-message', async (req, res) => {
 
         // Format race category in Hindi
         const raceCategoryHindi = {
-            '5K': '5 किलोमीटर',
-            '10K': '10 किलोमीटर',
-            '21K': '21 किलोमीटर'
+            '5KM': '5 किलोमीटर',
+            '10KM': '10 किलोमीटर',
+            '21KM': '21 किलोमीटर'
         }[raceCategory] || raceCategory;
 
         // Marathon message with participant details
