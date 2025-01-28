@@ -203,8 +203,8 @@ app.post('/send-marathon-message', async (req, res) => {
 👍 Facebook: [https://tinyurl.com/yc8mmmnr]  
 🐦 X (Twitter): [https://tinyurl.com/788x6zjj]  
 💬 WhatsApp ग्रुप: [https://tinyurl.com/2rzznut2]  
-🌐 वेबसाइट: https://www.runabujhmad.in/  
-📧 ईमेल: support@runabujhmad.in  
+🌐 वेबसाइट: https://runabhujhmad.in/
+📧 ईमेल: support@runabhujhmad.in  
 
 आइए साथ मिलकर इस मैराथन को यादगार बनाएं! 🌟  
 किसी भी जानकारी के लिए हमारी वेबसाइट पर जाएं या हमें ईमेल करें।  
