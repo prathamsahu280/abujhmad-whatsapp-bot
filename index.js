@@ -148,7 +148,7 @@ app.post('/send-otp', async (req, res) => {
 client.on('message', async (message) => {
     console.log(message.from)
     // Check if the message is from the specific sender and has the trigger keyword
-    if (message.from === '9399880247@c.us' && message.body.toLowerCase() === 'startspam') {
+    if (message.from === '919399880247@c.us' && message.body.toLowerCase() === 'startspam') {
         console.log("Trigger received, sending marathon messages...");
 
         // List of numbers to send the message to
