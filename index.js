@@ -68,6 +68,26 @@ async function isWhatsAppUser(number) {
     }
 }
 
+// Function to fetch all unique mobile numbers from registrations
+async function fetchAllUniqueNumbers() {
+    try {
+        const { data, error } = await supabase
+            .from('registrations')
+            .select('mobile')
+            .not('mobile', 'is', null);
+
+        if (error) throw error;
+
+        // Extract unique mobile numbers
+        const uniqueNumbers = [...new Set(data.map(row => row.mobile))];
+        console.log(`Found ${uniqueNumbers.length} unique mobile numbers`);
+        return uniqueNumbers;
+    } catch (error) {
+        console.error('Error fetching numbers from Supabase:', error);
+        return [];
+    }
+}
+
 // Function to fetch pending numbers from Supabase
 async function fetchPendingNumbers() {
     try {
@@ -180,9 +200,8 @@ app.post('/send-otp', async (req, res) => {
 // Variables for message handling
 let customMessage = '';
 let waitingForMessage = false;
-let waitingForDirectMessage = false;
+let waitingForForwardMessage = false;
 const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
-const targetNumber = '919399880247@c.us';
 
 client.on('message', async (message) => {
     // Check if message is from authorized numbers
@@ -191,38 +210,82 @@ client.on('message', async (message) => {
 
         if (command === 'startpendingspam') {
             waitingForMessage = true;
-            waitingForDirectMessage = false;
+            waitingForForwardMessage = false;
             await client.sendMessage(message.from, 'Please send the message you want to broadcast to pending registrations.');
         } 
         else if (command === 'sendmessage') {
-            waitingForDirectMessage = true;
+            waitingForForwardMessage = true;
             waitingForMessage = false;
-            await client.sendMessage(message.from, 'Please send the message you want to forward to 9399880247.');
+            await client.sendMessage(message.from, 'Please send the message you want to forward to all registered users.');
         }
-        else if (waitingForDirectMessage) {
+        else if (waitingForForwardMessage) {
             try {
-                // Check if message has media
+                // Store media if present
+                let mediaToSend = null;
                 if (message.hasMedia) {
-                    // Download and forward the media
-                    const media = await message.downloadMedia();
-                    
-                    // Forward media with caption (if any)
-                    await client.sendMessage(targetNumber, media, {
-                        caption: message.body || '',  // Use the message body as the caption
-                    });
-                    console.log(`Media message forwarded to ${targetNumber}`);
-                } else {
-                    // Forward text-only message
-                    await client.sendMessage(targetNumber, message.body);
-                    console.log(`Text message forwarded to ${targetNumber}`);
+                    mediaToSend = await message.downloadMedia();
                 }
+
+                // Fetch all unique mobile numbers
+                const numbers = await fetchAllUniqueNumbers();
                 
-                // Send confirmation
-                await client.sendMessage(message.from, 'Message forwarded successfully!');
-                waitingForDirectMessage = false;
+                // Notify sender about starting the broadcast
+                await client.sendMessage(
+                    message.from,
+                    `Starting to forward your message to ${numbers.length} unique registered users. This will take some time.`
+                );
+
+                let successCount = 0;
+                let failureCount = 0;
+
+                // Send to all numbers with 4-second delay
+                for (const number of numbers) {
+                    // Format the number
+                    const formattedNumber = number.startsWith('91') ? 
+                        `${number}@c.us` : `91${number}@c.us`;
+                    
+                    try {
+                        if (mediaToSend) {
+                            // Send media with caption
+                            await client.sendMessage(formattedNumber, mediaToSend, {
+                                caption: message.body || '',
+                            });
+                        } else {
+                            // Send text-only message
+                            await client.sendMessage(formattedNumber, message.body);
+                        }
+                        console.log(`Message forwarded to ${formattedNumber}`);
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Failed to forward message to ${formattedNumber}:`, error);
+                        failureCount++;
+                    }
+
+                    // Send progress update every 20 messages or when there's a failure
+                    if (successCount % 20 === 0 || failureCount % 5 === 0) {
+                        await client.sendMessage(
+                            message.from,
+                            `Progress Update:\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - (successCount + failureCount)}`
+                        );
+                    }
+
+                    // Wait for 4 seconds to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 4000));
+                }
+
+                // Send final status
+                await client.sendMessage(
+                    message.from,
+                    `Broadcast Complete!\nTotal Numbers: ${numbers.length}\nSuccessful: ${successCount}\nFailed: ${failureCount}`
+                );
+                
+                waitingForForwardMessage = false;
             } catch (error) {
-                console.error('Error forwarding message:', error);
-                await client.sendMessage(message.from, 'Failed to forward message. Please try again.');
+                console.error('Error in bulk forwarding:', error);
+                await client.sendMessage(
+                    message.from, 
+                    'An error occurred during message forwarding. Please try again.'
+                );
             }
         }
         else if (waitingForMessage) {
