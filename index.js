@@ -71,22 +71,30 @@ async function isWhatsAppUser(number) {
 // Function to fetch pending numbers from Supabase
 async function fetchPendingNumbers() {
     try {
-        const { data, error } = await supabase
+        // First, get all numbers that have DONE status
+        const { data: doneNumbers, error: doneError } = await supabase
             .from('registrations')
             .select('mobile')
-            .neq('city', 'Narayanpur')
-            .eq('payment_status', 'PENDING')
-            .not('mobile', 'in', (
-                supabase
-                    .from('registrations')
-                    .select('mobile')
-                    .eq('payment_status', 'DONE')
-            ));
+            .eq('payment_status', 'DONE');
 
-        if (error) throw error;
+        if (doneError) throw doneError;
+
+        // Create array of numbers with DONE status
+        const doneNumbersArray = doneNumbers.map(row => row.mobile);
+
+        // Now get all PENDING numbers that aren't in the DONE array and aren't from Narayanpur
+        const { data: pendingNumbers, error: pendingError } = await supabase
+            .from('registrations')
+            .select('mobile')
+            .eq('payment_status', 'PENDING')
+            .neq('city', 'Narayanpur')
+            .not('mobile', 'in', `(${doneNumbersArray.join(',')})`);
+
+        if (pendingError) throw pendingError;
 
         // Extract unique mobile numbers
-        const uniqueNumbers = [...new Set(data.map(row => row.mobile))];
+        const uniqueNumbers = [...new Set(pendingNumbers.map(row => row.mobile))];
+        console.log(`Found ${uniqueNumbers.length} unique pending numbers`);
         return uniqueNumbers;
     } catch (error) {
         console.error('Error fetching numbers from Supabase:', error);
