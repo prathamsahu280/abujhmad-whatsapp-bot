@@ -177,17 +177,42 @@ app.post('/send-otp', async (req, res) => {
     }
 });
 
+// Variables for message handling
 let customMessage = '';
 let waitingForMessage = false;
+let waitingForDirectMessage = false;
+const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
+const targetNumber = '919399880247@c.us';
 
 client.on('message', async (message) => {
     // Check if message is from authorized numbers
-    if (message.from === '919399880247@c.us' || message.from === '919926685773@c.us') {
-        if (message.body.toLowerCase() === 'startpendingspam') {
+    if (authorizedNumbers.includes(message.from)) {
+        const command = message.body.toLowerCase();
+
+        if (command === 'startpendingspam') {
             waitingForMessage = true;
+            waitingForDirectMessage = false;
             await client.sendMessage(message.from, 'Please send the message you want to broadcast to pending registrations.');
-        } else if (waitingForMessage) {
-            // Store the custom message and start sending
+        } 
+        else if (command === 'sendmessage') {
+            waitingForDirectMessage = true;
+            waitingForMessage = false;
+            await client.sendMessage(message.from, 'Please send the message you want to forward to 9399880247.');
+        }
+        else if (waitingForDirectMessage) {
+            try {
+                // Forward the message to the target number
+                await client.sendMessage(targetNumber, message.body);
+                await client.sendMessage(message.from, 'Message forwarded successfully!');
+                console.log(`Message forwarded to ${targetNumber}`);
+                waitingForDirectMessage = false;
+            } catch (error) {
+                console.error('Error forwarding message:', error);
+                await client.sendMessage(message.from, 'Failed to forward message. Please try again.');
+            }
+        }
+        else if (waitingForMessage) {
+            // Handle startpendingspam message
             customMessage = message.body;
             waitingForMessage = false;
             console.log("Starting to send custom message to pending registrations...");
@@ -210,7 +235,7 @@ client.on('message', async (message) => {
                     console.log(`Message sent to ${formattedNumber}`);
                     successCount++;
                     // Add delay to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 800));
                 } catch (error) {
                     console.error(`Failed to send message to ${formattedNumber}:`, error);
                     failureCount++;
