@@ -53,6 +53,13 @@ client.on('ready', () => {
 // Initialize WhatsApp client
 client.initialize();
 
+// Variables for message handling
+let customMessage = '';
+let waitingForMessage = false;
+let waitingForForwardMessage = false;
+let mediaToSend = null;
+const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
+
 // Function to check if number exists on WhatsApp
 async function isWhatsAppUser(number) {
     try {
@@ -197,12 +204,6 @@ app.post('/send-otp', async (req, res) => {
     }
 });
 
-// Variables for message handling
-let customMessage = '';
-let waitingForMessage = false;
-let waitingForForwardMessage = false;
-const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
-
 client.on('message', async (message) => {
     // Check if message is from authorized numbers
     if (authorizedNumbers.includes(message.from)) {
@@ -216,78 +217,115 @@ client.on('message', async (message) => {
         else if (command === 'sendmessage') {
             waitingForForwardMessage = true;
             waitingForMessage = false;
-            await client.sendMessage(message.from, 'Please send the message you want to forward to all registered users.');
+            await client.sendMessage(message.from, 'Please send the message you want to forward to all registered users. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
         }
         else if (waitingForForwardMessage) {
-            try {
-                // Store media if present
-                let mediaToSend = null;
-                if (message.hasMedia) {
-                    mediaToSend = await message.downloadMedia();
+            if (message.body.toLowerCase().startsWith('start:')) {
+                // Extract starting index from message
+                const startIndex = parseInt(message.body.split(':')[1].trim());
+                
+                // Ensure we have custom message stored
+                if (!customMessage) {
+                    await client.sendMessage(message.from, 'Please send the message content first before specifying a starting index.');
+                    return;
                 }
 
-                // Fetch all unique mobile numbers
-                const numbers = await fetchAllUniqueNumbers();
-                
-                // Notify sender about starting the broadcast
-                await client.sendMessage(
-                    message.from,
-                    `Starting to forward your message to ${numbers.length} unique registered users. This will take some time.`
-                );
-
-                let successCount = 0;
-                let failureCount = 0;
-                let failedNumbers = [];
-
-                // Send to all numbers with 2-second delay
-                for (const number of numbers) {
-                    // Format the number
-                    const formattedNumber = number.startsWith('91') ? 
-                        `${number}@c.us` : `91${number}@c.us`;
+                try {
+                    // Fetch all unique mobile numbers
+                    const numbers = await fetchAllUniqueNumbers();
                     
-                    try {
-                        if (mediaToSend) {
-                            // Send media with caption
-                            await client.sendMessage(formattedNumber, mediaToSend, {
-                                caption: message.body || '',
-                            });
-                        } else {
-                            // Send text-only message
-                            await client.sendMessage(formattedNumber, message.body);
+                    if (isNaN(startIndex) || startIndex < 0 || startIndex >= numbers.length) {
+                        await client.sendMessage(message.from, `Invalid starting index. Please provide a number between 0 and ${numbers.length - 1}.`);
+                        return;
+                    }
+                    
+                    // Notify sender about starting the broadcast
+                    await client.sendMessage(
+                        message.from,
+                        `Starting to forward your message from index ${startIndex} (${numbers.length - startIndex} numbers remaining). This will take some time.`
+                    );
+
+                    let successCount = 0;
+                    let failureCount = 0;
+                    let failedNumbers = [];
+
+                    // Start from the specified index
+                    for (let i = startIndex; i < numbers.length; i++) {
+                        const number = numbers[i];
+                        // Format the number
+                        const formattedNumber = number.startsWith('91') ? 
+                            `${number}@c.us` : `91${number}@c.us`;
+                        
+                        try {
+                            if (mediaToSend) {
+                                // Send media with caption
+                                await client.sendMessage(formattedNumber, mediaToSend, {
+                                    caption: customMessage || '',
+                                });
+                            } else {
+                                // Send text-only message
+                                await client.sendMessage(formattedNumber, customMessage);
+                            }
+                            console.log(`Message forwarded to ${formattedNumber} (index: ${i})`);
+                            successCount++;
+                        } catch (error) {
+                            console.error(`Failed to forward message to ${formattedNumber} (index: ${i}):`, error);
+                            failureCount++;
+                            failedNumbers.push(`${formattedNumber} (index: ${i})`);
                         }
-                        console.log(`Message forwarded to ${formattedNumber}`);
-                        successCount++;
-                    } catch (error) {
-                        console.error(`Failed to forward message to ${formattedNumber}:`, error);
-                        failureCount++;
-                        failedNumbers.push(formattedNumber);
+
+                        // Send progress update every 30 messages
+                        if ((successCount + failureCount) % 30 === 0) {
+                            await client.sendMessage(
+                                message.from,
+                                `Progress Update:\nStarted from index: ${startIndex}\nCurrent index: ${i}\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - i - 1}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.slice(-5).join(', ')}${failedNumbers.length > 5 ? ` and ${failedNumbers.length - 5} more` : ''}` : ''}`
+                            );
+                        }
+
+                        // Wait for 2 seconds to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                     }
 
-                    // Send progress update every 30 messages
-                    if ((successCount + failureCount) % 30 === 0) {
-                        await client.sendMessage(
-                            message.from,
-                            `Progress Update:\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - (successCount + failureCount)}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.slice(-5).join(', ')}${failedNumbers.length > 5 ? ` and ${failedNumbers.length - 5} more` : ''}` : ''}`
-                        );
-                    }
-
-                    // Wait for 2 seconds to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    // Send final status
+                    await client.sendMessage(
+                        message.from,
+                        `Broadcast Complete!\nStarted from index: ${startIndex}\nTotal Numbers Processed: ${numbers.length - startIndex}\nSuccessful: ${successCount}\nFailed: ${failureCount}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.join(', ')}` : ''}`
+                    );
+                    
+                    // Reset variables
+                    waitingForForwardMessage = false;
+                    customMessage = '';
+                    mediaToSend = null;
+                    
+                } catch (error) {
+                    console.error('Error in bulk forwarding:', error);
+                    await client.sendMessage(
+                        message.from, 
+                        'An error occurred during message forwarding. Please try again.'
+                    );
                 }
-
-                // Send final status
-                await client.sendMessage(
-                    message.from,
-                    `Broadcast Complete!\nTotal Numbers: ${numbers.length}\nSuccessful: ${successCount}\nFailed: ${failureCount}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.join(', ')}` : ''}`
-                );
-                
-                waitingForForwardMessage = false;
-            } catch (error) {
-                console.error('Error in bulk forwarding:', error);
-                await client.sendMessage(
-                    message.from, 
-                    'An error occurred during message forwarding. Please try again.'
-                );
+            } else {
+                try {
+                    // Store media if present
+                    if (message.hasMedia) {
+                        mediaToSend = await message.downloadMedia();
+                    }
+                    
+                    // Store the message content
+                    customMessage = message.body;
+                    
+                    await client.sendMessage(
+                        message.from,
+                        'Message received. You can now start sending by replying with "start:0" to begin from the first number, or "start:N" to begin from the Nth number (e.g., "start:50" to begin from the 50th number).'
+                    );
+                    
+                } catch (error) {
+                    console.error('Error storing message:', error);
+                    await client.sendMessage(
+                        message.from, 
+                        'An error occurred while processing your message. Please try again.'
+                    );
+                }
             }
         }
         else if (waitingForMessage) {
