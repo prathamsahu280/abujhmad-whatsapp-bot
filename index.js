@@ -1,5 +1,5 @@
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -201,10 +201,24 @@ client.on('message', async (message) => {
         }
         else if (waitingForDirectMessage) {
             try {
-                // Forward the message to the target number
-                await client.sendMessage(targetNumber, message.body);
+                // Check if message has media
+                if (message.hasMedia) {
+                    // Download and forward the media
+                    const media = await message.downloadMedia();
+                    
+                    // Forward media with caption (if any)
+                    await client.sendMessage(targetNumber, media, {
+                        caption: message.body || '',  // Use the message body as the caption
+                    });
+                    console.log(`Media message forwarded to ${targetNumber}`);
+                } else {
+                    // Forward text-only message
+                    await client.sendMessage(targetNumber, message.body);
+                    console.log(`Text message forwarded to ${targetNumber}`);
+                }
+                
+                // Send confirmation
                 await client.sendMessage(message.from, 'Message forwarded successfully!');
-                console.log(`Message forwarded to ${targetNumber}`);
                 waitingForDirectMessage = false;
             } catch (error) {
                 console.error('Error forwarding message:', error);
@@ -235,7 +249,7 @@ client.on('message', async (message) => {
                     console.log(`Message sent to ${formattedNumber}`);
                     successCount++;
                     // Add delay to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 800));
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (error) {
                     console.error(`Failed to send message to ${formattedNumber}:`, error);
                     failureCount++;
