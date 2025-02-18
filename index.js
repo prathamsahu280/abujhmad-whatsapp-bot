@@ -237,8 +237,9 @@ client.on('message', async (message) => {
 
                 let successCount = 0;
                 let failureCount = 0;
+                let failedNumbers = [];
 
-                // Send to all numbers with 4-second delay
+                // Send to all numbers with 2-second delay
                 for (const number of numbers) {
                     // Format the number
                     const formattedNumber = number.startsWith('91') ? 
@@ -259,24 +260,25 @@ client.on('message', async (message) => {
                     } catch (error) {
                         console.error(`Failed to forward message to ${formattedNumber}:`, error);
                         failureCount++;
+                        failedNumbers.push(formattedNumber);
                     }
 
-                    // Send progress update every 20 messages or when there's a failure
-                    if (successCount % 20 === 0 || failureCount % 5 === 0) {
+                    // Send progress update every 30 messages
+                    if ((successCount + failureCount) % 30 === 0) {
                         await client.sendMessage(
                             message.from,
-                            `Progress Update:\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - (successCount + failureCount)}`
+                            `Progress Update:\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - (successCount + failureCount)}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.slice(-5).join(', ')}${failedNumbers.length > 5 ? ` and ${failedNumbers.length - 5} more` : ''}` : ''}`
                         );
                     }
 
-                    // Wait for 4 seconds to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 4000));
+                    // Wait for 2 seconds to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
 
                 // Send final status
                 await client.sendMessage(
                     message.from,
-                    `Broadcast Complete!\nTotal Numbers: ${numbers.length}\nSuccessful: ${successCount}\nFailed: ${failureCount}`
+                    `Broadcast Complete!\nTotal Numbers: ${numbers.length}\nSuccessful: ${successCount}\nFailed: ${failureCount}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.join(', ')}` : ''}`
                 );
                 
                 waitingForForwardMessage = false;
