@@ -5,9 +5,15 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const https = require('https');
 const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Express
 const app = express();
+
+// Initialize Supabase
+const supabaseUrl = 'https://oounmycsyfuqvzagiadh.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vdW5teWNzeWZ1cXZ6YWdpYWRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI0NjAzMTUsImV4cCI6MjA0ODAzNjMxNX0.cqxVFYCn7youkcsCvvIMVo4hD_HzUlgPoEEJCfckz-c';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Add body parsing middleware
 app.use(bodyParser.json());
@@ -50,18 +56,41 @@ client.initialize();
 // Function to check if number exists on WhatsApp
 async function isWhatsAppUser(number) {
     try {
-        // Format number
         let formattedNumber = number;
         if (!number.includes('@c.us')) {
             formattedNumber = `${number}@c.us`;
         }
-        
-        // Get contact info
         const contact = await client.getNumberId(formattedNumber);
         return contact !== null;
     } catch (error) {
         console.error('Error checking number:', error);
         return false;
+    }
+}
+
+// Function to fetch pending numbers from Supabase
+async function fetchPendingNumbers() {
+    try {
+        const { data, error } = await supabase
+            .from('registrations')
+            .select('mobile')
+            .neq('city', 'Narayanpur')
+            .eq('payment_status', 'PENDING')
+            .not('mobile', 'in', (
+                supabase
+                    .from('registrations')
+                    .select('mobile')
+                    .eq('payment_status', 'DONE')
+            ));
+
+        if (error) throw error;
+
+        // Extract unique mobile numbers
+        const uniqueNumbers = [...new Set(data.map(row => row.mobile))];
+        return uniqueNumbers;
+    } catch (error) {
+        console.error('Error fetching numbers from Supabase:', error);
+        return [];
     }
 }
 
@@ -95,12 +124,11 @@ app.post('/check-number', async (req, res) => {
     }
 });
 
-// POST endpoint to receive number and OTP
+// POST endpoint to send OTP
 app.post('/send-otp', async (req, res) => {
     try {
         const { phoneNumber, otp } = req.body;
 
-        // Validate request body
         if (!phoneNumber || !otp) {
             return res.status(400).json({
                 success: false,
@@ -108,7 +136,6 @@ app.post('/send-otp', async (req, res) => {
             });
         }
 
-        // Check if number exists on WhatsApp
         const exists = await isWhatsAppUser(phoneNumber);
         if (!exists) {
             return res.status(400).json({
@@ -117,16 +144,13 @@ app.post('/send-otp', async (req, res) => {
             });
         }
 
-        // Format phone number
         let formattedNumber = phoneNumber;
         if (!phoneNumber.includes('@c.us')) {
             formattedNumber = `${phoneNumber}@c.us`;
         }
 
-        // Message template
         const message = `Your OTP is: ${otp}\nPlease do not share this OTP with anyone.`;
 
-        // Send message
         const response = await client.sendMessage(formattedNumber, message);
 
         res.status(200).json({
@@ -145,82 +169,65 @@ app.post('/send-otp', async (req, res) => {
     }
 });
 
+let customMessage = '';
+let waitingForMessage = false;
+
 client.on('message', async (message) => {
-    console.log(message.from)
-    // Check if the message is from the specific sender and has the trigger keyword
-    if ( message.body.toLowerCase() === 'startpendingmessage' &&(message.from === '919399880247@c.us' || message.from === '919926685773@c.us')) {
-        console.log("Trigger received, sending marathon messages...");
+    // Check if message is from authorized numbers
+    if (message.from === '919399880247@c.us' || message.from === '919926685773@c.us') {
+        if (message.body.toLowerCase() === 'startpendingspam') {
+            waitingForMessage = true;
+            await client.sendMessage(message.from, 'Please send the message you want to broadcast to pending registrations.');
+        } else if (waitingForMessage) {
+            // Store the custom message and start sending
+            customMessage = message.body;
+            waitingForMessage = false;
+            console.log("Starting to send custom message to pending registrations...");
 
-        // List of numbers to send the message to
-        const numbers =["6009110725", "6205971526", "6260343259", "6261290357", "6261320876", 
-            "6261411352", "6261725166", "6262332710", "6262448845", "6263026809", 
-            "6263088219", "6263142409", "6263255269", "6263920508", "6264152038", 
-            "6264864112", "6265012566", "6265022726", "6265027897", "6265369367",
-            "6265431710", "6265839887", "6266193551", "6266212142", "6266273310",
-            "6266916802", "6267455397", "6267718192", "6267820728", "6268002064",
-            "6268389945", "6268519363", "6268661118", "6268760489", "6268814077",
-            "6394613525", "7000161949", "7021514328", "7024011986", "7067080603",
-            "7067195790", "7067265301", "7067474648", "7067672174", "7067968403",
-            "7078420520", "7240906815", "7248490575", "7289065301", "7375901173",
-            "7389090005", "7437909046", "7447036988", "7489315044", "7489629148",
-            "7489846223", "7587156035", "7587208048", "7587426898", "7587468563",
-            "7587472064", "7587485246", "7587839845", "7587841009", "7610341132",
-            "7611158260", "7646801030", "7646833859", "7647064869", "7647844336",
-            "7722827837", "7722879781", "7723865347", "7724869477", "7724896026",
-            "7725032621", "7792061687", "7803001972", "7803007306", "7803992727",
-            "7828525832", "7828626082", "7879435870", "7909537316", "7974057320",
-            "7974632860", "7987116727", "7987247697", "7987432902", "7987492241",
-            "7987547668", "7987916386", "7999052971", "7999213194", "8072804367",
-            "8103476489", "8103542429", "8103654047", "8103770791", "8249570905",
-            "8260332250", "8305341436", "8305750748", "8309345044", "8378989276",
-            "8435271591", "8595314594", "8629932207", "8719096552", "8720800326",
-            "8770074244", "8770152911", "8780785697", "8815506710", "8815720817",
-            "8815831317", "8817235440", "8817576523", "8817721458", "8817862972",
-            "8839710622", "8839996100", "8930752361", "8982020134", "9009810125",
-            "9021029379", "9027400097", "9039417246", "9060859267", "9098201770",
-            "9098477814", "9109338655", "9109386108", "9131001401", "9131145585",
-            "9131177874", "9131271531", "9131544023", "9131704797", "9179065416",
-            "9202145506", "9238681731", "9238823861", "9244044561", "9244213822",
-            "9244733049", "9244870762", "9267930081", "9301394457", "9301529248",
-            "9301626244", "9302132336", "9302307989", "9302375716", "9302842972",
-            "9302965672", "9303838860", "9310365330", "9329120829", "9329411934",
-            "9329433681", "9329502212", "9329782826", "9336240959", "9340169220",
-            "9340396843", "9389882272", "9399159154", "9399376980", "9399753787",
-            "9399795734", "9399797534", "9399804891", "9406216095", "9406407044",
-            "9407723923", "9407740984", "9479263731", "9516043526", "9636378758",
-            "9691008919", "9691674775", "9693614989", "9754528461", "9755306091",
-            "9758275877", "9761596607", "9770163429", "9770291863", "9826125409",
-            "9827345598", "9935941400"
-        ];
+            // Fetch numbers from Supabase
+            const numbers = await fetchPendingNumbers();
+            console.log(`Found ${numbers.length} pending registrations`);
 
-        // Message content
-        const messageContent = `🏃‍♂ मात्र ₹299 में मैराथन का पूरा मज़ा! 🎯  
-✨ इसमें शामिल है:  
-🍽 मुफ्त खाना और रहना - पूरी मैराथन के दौरान भरपूर भोजन और आरामदायक रहने की सुविधा!  
-🎁 रनर पैकेज - ई-सर्टिफिकेट, स्पेशल टी-शर्ट और शानदार गिफ्ट्स आपके लिए!  
-🏅 रेस सामग्री - इलेक्ट्रॉनिक बिब और फिनिशर मेडल गारंटीड!  
-🌅 खूबसूरत नज़ारे - प्रकृति के बीच दौड़ने का अद्भुत अनुभव!  
-📸 यादगार पल - रेस की लाइव फोटो और वीडियो कवरेज!  
-[अभी रजिस्टर करें]  
-सीटें सीमित हैं! जल्दी करें! 🏃‍♀✨  
-रजिस्टर करने के लिए: runabhujhmad.in/registration`;
+            // Send initial status
+            await client.sendMessage(message.from, `Starting to send messages to ${numbers.length} numbers...`);
 
-        // Send message to all numbers
-        for (const number of numbers) {
-            const formattedNumber = `91${number}@c.us`; // Add country code
-            try {
-                await client.sendMessage(formattedNumber, messageContent);
-                console.log(`Message sent to ${formattedNumber}`);
-            } catch (error) {
-                console.error(`Failed to send message to ${formattedNumber}:`, error);
+            let successCount = 0;
+            let failureCount = 0;
+
+            // Send message to all numbers
+            for (const number of numbers) {
+                const formattedNumber = `91${number}@c.us`;
+                try {
+                    await client.sendMessage(formattedNumber, customMessage);
+                    console.log(`Message sent to ${formattedNumber}`);
+                    successCount++;
+                    // Add delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    console.error(`Failed to send message to ${formattedNumber}:`, error);
+                    failureCount++;
+                }
+
+                // Send progress update every 20 messages
+                if ((successCount + failureCount) % 20 === 0) {
+                    await client.sendMessage(message.from, 
+                        `Progress Update:\nSuccessful: ${successCount}\nFailed: ${failureCount}\nRemaining: ${numbers.length - (successCount + failureCount)}`
+                    );
+                }
             }
+
+            // Send final status
+            await client.sendMessage(message.from, 
+                `Broadcast Complete!\nTotal Numbers: ${numbers.length}\nSuccessful: ${successCount}\nFailed: ${failureCount}`
+            );
+
+            // Reset custom message
+            customMessage = '';
         }
     }
 });
 
-
-// New route to send marathon information message
-// New route to send marathon message
+// Route to send marathon message
 app.post('/send-marathon-message', async (req, res) => {
     try {
         const { 
@@ -232,7 +239,6 @@ app.post('/send-marathon-message', async (req, res) => {
             lastName
         } = req.body;
 
-        // Validate request body
         if (!phoneNumber) {
             return res.status(400).json({
                 success: false,
@@ -240,7 +246,6 @@ app.post('/send-marathon-message', async (req, res) => {
             });
         }
 
-        // Check if number exists on WhatsApp
         const exists = await isWhatsAppUser(phoneNumber);
         if (!exists) {
             return res.status(400).json({
@@ -249,20 +254,17 @@ app.post('/send-marathon-message', async (req, res) => {
             });
         }
 
-        // Format phone number
         let formattedNumber = phoneNumber;
         if (!phoneNumber.includes('@c.us')) {
             formattedNumber = `${phoneNumber}@c.us`;
         }
 
-        // Format race category in Hindi
         const raceCategoryHindi = {
             '5KM': '5 किलोमीटर',
             '10KM': '10 किलोमीटर',
             '21KM': '21 किलोमीटर'
         }[raceCategory] || raceCategory;
 
-        // Marathon message with participant details
         const message = `🏃‍♂🌟 आप अबूझमाड़ पीस हाफ मैराथन में सफलतापूर्वक पंजीकृत हो गए हैं! 🌟🏃‍♀  
 तैयार हो जाइए, 02 मार्च को दौड़ने के लिए!  
 
@@ -285,7 +287,6 @@ app.post('/send-marathon-message', async (req, res) => {
 "आओ मिलकर उठाए ये कदम, अबूझमाड को जोड़े हमारे संग"! 🏃‍♂🌟  
 #अबूझमाड़मैराथन #RunAbhujhmad #साथचलेंगे #बेहतरकलकेलिए`;
 
-        // Send message
         const response = await client.sendMessage(formattedNumber, message);
 
         res.status(200).json({
@@ -312,6 +313,6 @@ const options = {
 
 // Start HTTPS server
 const PORT = process.env.PORT || 3001;
-https.createServer(options, app).listen(PORT,"0.0.0.0", () => {
+https.createServer(options, app).listen(PORT, "0.0.0.0", () => {
     console.log(`HTTPS Server running on port ${PORT}`);
 });
