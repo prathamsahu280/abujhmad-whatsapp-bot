@@ -58,6 +58,7 @@ let customMessage = '';
 let waitingForMessage = false;
 let waitingForForwardMessage = false;
 let waitingForCategory = false;
+let waitingForGroupName = false;
 let selectedCategory = null;
 let mediaToSend = null;
 const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
@@ -247,10 +248,24 @@ client.on('message', async (message) => {
     if (authorizedNumbers.includes(message.from)) {
         const command = message.body.toLowerCase();
 
-        if (command === 'startcategoryspam') {
+        if (command === 'creategroups') {
+            waitingForCategory = true;
+            waitingForGroupName = false;
+            waitingForForwardMessage = false;
+            waitingForMessage = false;
+            selectedCategory = null;
+            await client.sendMessage(message.from, 
+                'Please select a category by sending the corresponding number:\n' +
+                '1. Narayanpur\n' +
+                '2. From Chhattisgarh\n' +
+                '3. Outside Chhattisgarh'
+            );
+        }
+        else if (command === 'startcategoryspam') {
             waitingForCategory = true;
             waitingForMessage = false;
             waitingForForwardMessage = false;
+            waitingForGroupName = false;
             await client.sendMessage(message.from, 
                 'Please select a category by sending the corresponding number:\n' +
                 '1. Narayanpur\n' +
@@ -262,24 +277,85 @@ client.on('message', async (message) => {
             waitingForMessage = true;
             waitingForForwardMessage = false;
             waitingForCategory = false;
+            waitingForGroupName = false;
             await client.sendMessage(message.from, 'Please send the message you want to broadcast to pending registrations.');
         } 
         else if (command === 'sendmessage') {
             waitingForForwardMessage = true;
             waitingForMessage = false;
             waitingForCategory = false;
+            waitingForGroupName = false;
             selectedCategory = null;
             await client.sendMessage(message.from, 'Please send the message you want to forward to all registered users. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
         }
         else if (waitingForCategory) {
             if (['1', '2', '3'].includes(message.body)) {
                 selectedCategory = message.body;
-                waitingForCategory = false;
-                waitingForForwardMessage = true;
-                await client.sendMessage(message.from, 'Category selected. Please send the message you want to forward to the selected category. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
+                
+                if (waitingForGroupName) {
+                    await client.sendMessage(message.from, 'Please send the name for the WhatsApp group.');
+                } else {
+                    waitingForCategory = false;
+                    waitingForForwardMessage = true;
+                    await client.sendMessage(message.from, 'Category selected. Please send the message you want to forward to the selected category. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
+                }
             } else {
                 await client.sendMessage(message.from, 'Invalid category. Please select 1, 2, or 3.');
             }
+        }
+        else if (waitingForGroupName && selectedCategory) {
+            const groupName = message.body;
+            waitingForGroupName = false;
+            
+            try {
+                // Fetch numbers based on selected category
+                const numbers = await fetchNumbersByCategory(selectedCategory);
+                
+                if (numbers.length === 0) {
+                    await client.sendMessage(message.from, 'No numbers found for this category.');
+                    return;
+                }
+
+                // Format numbers for WhatsApp group
+                const formattedNumbers = numbers.map(number => 
+                    number.startsWith('91') ? `${number}@c.us` : `91${number}@c.us`
+                );
+                
+                // Add authorized numbers to the group members
+                const allParticipants = [...new Set([...formattedNumbers, ...authorizedNumbers])];
+                
+                // Create the group
+                const chat = await client.createGroup(groupName, allParticipants);
+                
+                if (chat) {
+                    // Set group settings to admin-only messages
+                    await client.setGroupSettings(chat.id._serialized, {
+                        'announcement': true  // Only admins can send messages
+                    });
+                    
+                    // Make authorized users admins
+                    for (const adminNumber of authorizedNumbers) {
+                        await client.promoteParticipant(chat.id._serialized, adminNumber);
+                    }
+                    
+                    await client.sendMessage(message.from, 
+                        `Group "${groupName}" created successfully!\n` +
+                        `Total participants: ${allParticipants.length}\n` +
+                        `Group settings: Only admins can send messages\n` +
+                        `Authorized users have been made admins`
+                    );
+                }
+            } catch (error) {
+                console.error('Error creating group:', error);
+                await client.sendMessage(message.from, 
+                    'An error occurred while creating the group. Please try again.\n' +
+                    'Note: Make sure all numbers are valid WhatsApp numbers.'
+                );
+            }
+            
+            // Reset states
+            selectedCategory = null;
+            waitingForGroupName = false;
         }
         else if (waitingForForwardMessage) {
             if (message.body.toLowerCase().startsWith('start:')) {
