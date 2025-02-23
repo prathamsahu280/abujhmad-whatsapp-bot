@@ -110,12 +110,12 @@ async function fetchNumbersByCategory(category) {
             case '2': // From Chhattisgarh
                 query = query
                     .eq('is_from_narayanpur', false)
-                    .ilike('state', 'Chhattisgarh');
+                    .ilike('state', 'Chattisgarh');
                 break;
             case '3': // Outside Chhattisgarh
                 query = query
                     .eq('is_from_narayanpur', false)
-                    .not('state', 'ilike', 'Chhattisgarh');
+                    .not('state', 'ilike', 'Chattisgarh');
                 break;
             default:
                 throw new Error('Invalid category');
