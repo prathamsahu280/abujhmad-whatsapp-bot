@@ -404,19 +404,24 @@ client.on('message', async (message) => {
                 // Add authorized numbers to the group members
                 const allParticipants = [...new Set([...formattedNumbers, ...authorizedNumbers])];
                 
-                // Create the group
-                const groupChat = await client.createGroup(groupName, allParticipants);
+                // Create the group and handle the response properly
+                const group = await client.createGroup(groupName, allParticipants);
                 
-                if (groupChat && groupChat.gid) {  // Changed to check for gid
+                // Check if group creation was successful by verifying the group object
+                if (group && group.id) {
                     try {
-                        // Set group settings to admin-only messages
-                        await client.setGroupSettings(groupChat.gid, {  // Using gid instead of _serialized
-                            'announcement': true  // Only admins can send messages
-                        });
+                        // Use the group's id for subsequent operations
+                        const groupId = group.id._serialized || group.id;
+                        
+                        // Set group description
+                        await group.setDescription('Official group created by Abhujhmad Marathon');
+                        
+                        // Set group to announcement-only (only admins can send messages)
+                        await group.setMessagesAdminsOnly(true);
                         
                         // Make authorized users admins
                         for (const adminNumber of authorizedNumbers) {
-                            await client.promoteParticipant(groupChat.gid, adminNumber);  // Using gid instead of _serialized
+                            await group.promoteParticipants([adminNumber]);
                         }
                         
                         await client.sendMessage(message.from, 
@@ -434,7 +439,7 @@ client.on('message', async (message) => {
                         );
                     }
                 } else {
-                    throw new Error('Failed to create group: Invalid response structure');
+                    throw new Error('Failed to create group: Invalid group object returned');
                 }
             } catch (error) {
                 console.error('Error creating group:', error);
