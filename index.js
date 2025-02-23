@@ -57,6 +57,8 @@ client.initialize();
 let customMessage = '';
 let waitingForMessage = false;
 let waitingForForwardMessage = false;
+let waitingForCategory = false;
+let selectedCategory = null;
 let mediaToSend = null;
 const authorizedNumbers = ['919399880247@c.us', '919926685773@c.us'];
 
@@ -85,9 +87,46 @@ async function fetchAllUniqueNumbers() {
 
         if (error) throw error;
 
-        // Extract unique mobile numbers
         const uniqueNumbers = [...new Set(data.map(row => row.mobile))];
         console.log(`Found ${uniqueNumbers.length} unique mobile numbers`);
+        return uniqueNumbers;
+    } catch (error) {
+        console.error('Error fetching numbers from Supabase:', error);
+        return [];
+    }
+}
+
+// Function to fetch numbers based on category
+async function fetchNumbersByCategory(category) {
+    try {
+        let query = supabase
+            .from('registrations')
+            .select('mobile');
+
+        switch (category) {
+            case '1': // Narayanpur
+                query = query.eq('is_from_narayanpur', true);
+                break;
+            case '2': // From Chhattisgarh
+                query = query
+                    .eq('is_from_narayanpur', false)
+                    .ilike('state', 'Chhattisgarh');
+                break;
+            case '3': // Outside Chhattisgarh
+                query = query
+                    .eq('is_from_narayanpur', false)
+                    .not('state', 'ilike', 'Chhattisgarh');
+                break;
+            default:
+                throw new Error('Invalid category');
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        const uniqueNumbers = [...new Set(data.map(row => row.mobile))];
+        console.log(`Found ${uniqueNumbers.length} unique numbers for category ${category}`);
         return uniqueNumbers;
     } catch (error) {
         console.error('Error fetching numbers from Supabase:', error);
@@ -119,7 +158,6 @@ async function fetchPendingNumbers() {
 
         if (pendingError) throw pendingError;
 
-        // Extract unique mobile numbers
         const uniqueNumbers = [...new Set(pendingNumbers.map(row => row.mobile))];
         console.log(`Found ${uniqueNumbers.length} unique pending numbers`);
         return uniqueNumbers;
@@ -209,37 +247,59 @@ client.on('message', async (message) => {
     if (authorizedNumbers.includes(message.from)) {
         const command = message.body.toLowerCase();
 
-        if (command === 'startpendingspam') {
+        if (command === 'startcategoryspam') {
+            waitingForCategory = true;
+            waitingForMessage = false;
+            waitingForForwardMessage = false;
+            await client.sendMessage(message.from, 
+                'Please select a category by sending the corresponding number:\n' +
+                '1. Narayanpur\n' +
+                '2. From Chhattisgarh\n' +
+                '3. Outside Chhattisgarh'
+            );
+        }
+        else if (command === 'startpendingspam') {
             waitingForMessage = true;
             waitingForForwardMessage = false;
+            waitingForCategory = false;
             await client.sendMessage(message.from, 'Please send the message you want to broadcast to pending registrations.');
         } 
         else if (command === 'sendmessage') {
             waitingForForwardMessage = true;
             waitingForMessage = false;
+            waitingForCategory = false;
+            selectedCategory = null;
             await client.sendMessage(message.from, 'Please send the message you want to forward to all registered users. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
+        }
+        else if (waitingForCategory) {
+            if (['1', '2', '3'].includes(message.body)) {
+                selectedCategory = message.body;
+                waitingForCategory = false;
+                waitingForForwardMessage = true;
+                await client.sendMessage(message.from, 'Category selected. Please send the message you want to forward to the selected category. After sending your message, you can specify a starting index by replying with "start:NUMBER".');
+            } else {
+                await client.sendMessage(message.from, 'Invalid category. Please select 1, 2, or 3.');
+            }
         }
         else if (waitingForForwardMessage) {
             if (message.body.toLowerCase().startsWith('start:')) {
-                // Extract starting index from message
                 const startIndex = parseInt(message.body.split(':')[1].trim());
                 
-                // Ensure we have custom message stored
                 if (!customMessage) {
                     await client.sendMessage(message.from, 'Please send the message content first before specifying a starting index.');
                     return;
                 }
 
                 try {
-                    // Fetch all unique mobile numbers
-                    const numbers = await fetchAllUniqueNumbers();
+                    const numbers = selectedCategory ? 
+                        await fetchNumbersByCategory(selectedCategory) : 
+                        await fetchAllUniqueNumbers();
                     
                     if (isNaN(startIndex) || startIndex < 0 || startIndex >= numbers.length) {
                         await client.sendMessage(message.from, `Invalid starting index. Please provide a number between 0 and ${numbers.length - 1}.`);
                         return;
                     }
                     
-                    // Notify sender about starting the broadcast
                     await client.sendMessage(
                         message.from,
                         `Starting to forward your message from index ${startIndex} (${numbers.length - startIndex} numbers remaining). This will take some time.`
@@ -249,21 +309,17 @@ client.on('message', async (message) => {
                     let failureCount = 0;
                     let failedNumbers = [];
 
-                    // Start from the specified index
                     for (let i = startIndex; i < numbers.length; i++) {
                         const number = numbers[i];
-                        // Format the number
                         const formattedNumber = number.startsWith('91') ? 
                             `${number}@c.us` : `91${number}@c.us`;
                         
                         try {
                             if (mediaToSend) {
-                                // Send media with caption
                                 await client.sendMessage(formattedNumber, mediaToSend, {
                                     caption: customMessage || '',
                                 });
                             } else {
-                                // Send text-only message
                                 await client.sendMessage(formattedNumber, customMessage);
                             }
                             console.log(`Message forwarded to ${formattedNumber} (index: ${i})`);
@@ -274,7 +330,6 @@ client.on('message', async (message) => {
                             failedNumbers.push(`${formattedNumber} (index: ${i})`);
                         }
 
-                        // Send progress update every 30 messages
                         if ((successCount + failureCount) % 30 === 0) {
                             await client.sendMessage(
                                 message.from,
@@ -282,20 +337,18 @@ client.on('message', async (message) => {
                             );
                         }
 
-                        // Wait for 2 seconds to avoid rate limiting
                         await new Promise(resolve => setTimeout(resolve, 2000));
                     }
 
-                    // Send final status
                     await client.sendMessage(
                         message.from,
                         `Broadcast Complete!\nStarted from index: ${startIndex}\nTotal Numbers Processed: ${numbers.length - startIndex}\nSuccessful: ${successCount}\nFailed: ${failureCount}\n${failedNumbers.length > 0 ? `Failed numbers: ${failedNumbers.join(', ')}` : ''}`
                     );
                     
-                    // Reset variables
                     waitingForForwardMessage = false;
                     customMessage = '';
                     mediaToSend = null;
+                    selectedCategory = null;
                     
                 } catch (error) {
                     console.error('Error in bulk forwarding:', error);
@@ -306,12 +359,10 @@ client.on('message', async (message) => {
                 }
             } else {
                 try {
-                    // Store media if present
                     if (message.hasMedia) {
                         mediaToSend = await message.downloadMedia();
                     }
                     
-                    // Store the message content
                     customMessage = message.body;
                     
                     await client.sendMessage(
@@ -329,16 +380,13 @@ client.on('message', async (message) => {
             }
         }
         else if (waitingForMessage) {
-            // Handle startpendingspam message
             customMessage = message.body;
             waitingForMessage = false;
             console.log("Starting to send custom message to pending registrations...");
 
-            // Fetch numbers from Supabase
             const numbers = await fetchPendingNumbers();
             console.log(`Found ${numbers.length} pending registrations`);
 
-            // Send initial status
             await client.sendMessage(message.from, `Starting to send messages to ${numbers.length} numbers...`);
 
             let successCount = 0;
