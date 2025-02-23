@@ -357,6 +357,7 @@ client.on('message', async (message) => {
 });
 
 // Second message handler specifically for group creation
+// Second message handler specifically for group creation
 client.on('message', async (message) => {
     // Check if message is from authorized numbers
     if (authorizedNumbers.includes(message.from)) {
@@ -404,38 +405,68 @@ client.on('message', async (message) => {
                 // Add authorized numbers to the group members
                 const allParticipants = [...new Set([...formattedNumbers, ...authorizedNumbers])];
                 
-                // Create the group and handle the response properly
+                // Create the group
                 const group = await client.createGroup(groupName, allParticipants);
                 
-                // Check if group creation was successful by verifying the group object
+                // Check if group creation was successful
                 if (group && group.id) {
                     try {
-                        // Use the group's id for subsequent operations
-                        const groupId = group.id._serialized || group.id;
-                        
                         // Set group description
-                        await group.setDescription('Official group created by Abhujhmad Marathon');
+                        const descriptionResult = await group.setDescription(
+                            'Official group created by Abhujhmad Marathon'
+                        );
                         
-                        // Set group to announcement-only (only admins can send messages)
-                        await group.setMessagesAdminsOnly(true);
+                        // Set group settings
+                        const messagesAdminsResult = await group.setMessagesAdminsOnly();
+                        const infoAdminsResult = await group.setInfoAdminsOnly();
+                        const addMembersAdminsResult = await group.setAddMembersAdminsOnly();
                         
                         // Make authorized users admins
-                        for (const adminNumber of authorizedNumbers) {
-                            await group.promoteParticipants([adminNumber]);
-                        }
-                        
-                        await client.sendMessage(message.from, 
-                            `Group "${groupName}" created successfully!\n` +
-                            `Total participants: ${allParticipants.length}\n` +
-                            `Group settings: Only admins can send messages\n` +
-                            `Authorized users have been made admins`
+                        const promotionResults = await Promise.all(
+                            authorizedNumbers.map(async (adminNumber) => {
+                                try {
+                                    const result = await group.promoteParticipants([adminNumber]);
+                                    return { number: adminNumber, success: result.status === 200 };
+                                } catch (error) {
+                                    return { number: adminNumber, success: false, error };
+                                }
+                            })
                         );
+                        
+                        // Generate group invite link
+                        const inviteCode = await group.getInviteCode();
+                        
+                        // Prepare status message
+                        const statusMessage = [
+                            `Group "${groupName}" created successfully!`,
+                            `Total participants: ${allParticipants.length}`,
+                            `Group settings:`,
+                            `- Admin-only messages: ${messagesAdminsResult ? '✓' : '✗'}`,
+                            `- Admin-only info: ${infoAdminsResult ? '✓' : '✗'}`,
+                            `- Admin-only adding members: ${addMembersAdminsResult ? '✓' : '✗'}`,
+                            `- Description set: ${descriptionResult ? '✓' : '✗'}`,
+                            `Admin status:`,
+                            ...promotionResults.map(result => 
+                                `- ${result.number.split('@')[0]}: ${result.success ? '✓' : '✗'}`
+                            ),
+                            `\nGroup invite link: https://chat.whatsapp.com/${inviteCode}`
+                        ].join('\n');
+                        
+                        await client.sendMessage(message.from, statusMessage);
+                        
+                        // Send welcome message to the group
+                        await group.sendMessage(
+                            'Welcome to the Abhujhmad Marathon official group! 🏃‍♂️🎉\n' +
+                            'This group is for important announcements and updates.'
+                        );
+                        
                     } catch (settingsError) {
-                        console.error('Error setting group settings:', settingsError);
+                        console.error('Error configuring group:', settingsError);
                         await client.sendMessage(message.from, 
-                            `Group "${groupName}" created successfully, but there was an error setting group permissions.\n` +
+                            `Group "${groupName}" created, but there were some errors in configuration.\n` +
                             `Total participants: ${allParticipants.length}\n` +
-                            `Please set group settings manually.`
+                            `Error: ${settingsError.message}\n` +
+                            `Please check and configure group settings manually.`
                         );
                     }
                 } else {
@@ -445,7 +476,7 @@ client.on('message', async (message) => {
                 console.error('Error creating group:', error);
                 await client.sendMessage(message.from, 
                     'An error occurred while creating the group. Please try again.\n' +
-                    'Note: Make sure all numbers are valid WhatsApp numbers.'
+                    'Note: Make sure all numbers are valid WhatsApp numbers and the bot has necessary permissions.'
                 );
             }
             
@@ -455,7 +486,6 @@ client.on('message', async (message) => {
         }
     }
 });
-
 // Endpoint to check if number exists on WhatsApp
 app.post('/check-number', async (req, res) => {
     try {
