@@ -395,7 +395,7 @@ client.on('message', async (message) => {
                     await client.sendMessage(message.from, 'No numbers found for this category.');
                     return;
                 }
-
+        
                 // Format numbers for WhatsApp group
                 const formattedNumbers = numbers.map(number => 
                     number.startsWith('91') ? `${number}@c.us` : `91${number}@c.us`
@@ -405,25 +405,36 @@ client.on('message', async (message) => {
                 const allParticipants = [...new Set([...formattedNumbers, ...authorizedNumbers])];
                 
                 // Create the group
-                const chat = await client.createGroup(groupName, allParticipants);
+                const groupChat = await client.createGroup(groupName, allParticipants);
                 
-                if (chat) {
-                    // Set group settings to admin-only messages
-                    await client.setGroupSettings(chat.id._serialized, {
-                        'announcement': true  // Only admins can send messages
-                    });
-                    
-                    // Make authorized users admins
-                    for (const adminNumber of authorizedNumbers) {
-                        await client.promoteParticipant(chat.id._serialized, adminNumber);
+                if (groupChat && groupChat.gid) {  // Changed to check for gid
+                    try {
+                        // Set group settings to admin-only messages
+                        await client.setGroupSettings(groupChat.gid, {  // Using gid instead of _serialized
+                            'announcement': true  // Only admins can send messages
+                        });
+                        
+                        // Make authorized users admins
+                        for (const adminNumber of authorizedNumbers) {
+                            await client.promoteParticipant(groupChat.gid, adminNumber);  // Using gid instead of _serialized
+                        }
+                        
+                        await client.sendMessage(message.from, 
+                            `Group "${groupName}" created successfully!\n` +
+                            `Total participants: ${allParticipants.length}\n` +
+                            `Group settings: Only admins can send messages\n` +
+                            `Authorized users have been made admins`
+                        );
+                    } catch (settingsError) {
+                        console.error('Error setting group settings:', settingsError);
+                        await client.sendMessage(message.from, 
+                            `Group "${groupName}" created successfully, but there was an error setting group permissions.\n` +
+                            `Total participants: ${allParticipants.length}\n` +
+                            `Please set group settings manually.`
+                        );
                     }
-                    
-                    await client.sendMessage(message.from, 
-                        `Group "${groupName}" created successfully!\n` +
-                        `Total participants: ${allParticipants.length}\n` +
-                        `Group settings: Only admins can send messages\n` +
-                        `Authorized users have been made admins`
-                    );
+                } else {
+                    throw new Error('Failed to create group: Invalid response structure');
                 }
             } catch (error) {
                 console.error('Error creating group:', error);
