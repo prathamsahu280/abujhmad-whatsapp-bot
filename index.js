@@ -638,6 +638,75 @@ app.post('/send-marathon-message', async (req, res) => {
         });
     }
 });
+// Route to send bib allocation message
+app.post('/bib-allocated', async (req, res) => {
+    try {
+        const { phoneNumber, bib, category } = req.body;
+
+        if (!phoneNumber || !bib || !category) {
+            return res.status(400).json({
+                success: false,
+                message: 'Phone number, bib number, and category are required'
+            });
+        }
+
+        // Format the phone number for WhatsApp
+        let formattedNumber = phoneNumber;
+        
+        // Check if number already has 91 prefix and @c.us suffix
+        if (!phoneNumber.includes('@c.us')) {
+            // Add 91 prefix if not already present
+            formattedNumber =  phoneNumber.startsWith('91') ? 
+                `${phoneNumber}@c.us` : `91${phoneNumber}@c.us`;
+        }
+
+        // Check if the number exists on WhatsApp
+        const exists = await isWhatsAppUser(formattedNumber);
+        if (!exists) {
+            return res.status(400).json({
+                success: false,
+                message: 'This number is not registered on WhatsApp'
+            });
+        }
+
+        // Create the bib allocation message
+        const message = `🎉 अबूझमाड़ पीस हाफ मैराथन 2K25 - बिब आवंटन की पुष्टि 🎉
+
+आपने सफलतापूर्वक अपना बिब नंबर प्राप्त कर लिया है!
+
+🔢 आपका बिब नंबर: ${bib}
+🏃‍♀️ रेस श्रेणी: ${category}
+📅 दौड़ की तारीख: 2 मार्च, 2025
+⏰ रिपोर्टिंग समय: सुबह 4:30 बजे
+
+अपना विवरण देखने के लिए "व्यू डिटेल्स" काउंटर पर जाएं और अपने लिए एक कस्टमाइज्ड वीडियो प्राप्त करें।
+
+इवेंट शेड्यूल और अधिक जानकारी के लिए हमारी वेबसाइट देखें: https://runabhujhmad.in
+
+तैयार हो जाइए! हमें आपके साथ दौड़ने का इंतज़ार है! 🏃‍♂️🏃‍♀️
+
+#RunAbhujhmad #अबूझमाड़मैराथन #साथचलेंगे`;
+
+        // Send the message
+        const response = await client.sendMessage(formattedNumber, message);
+
+        // Return success response
+        res.status(200).json({
+            success: true,
+            message: 'Bib allocation message sent successfully',
+            messageId: response.id,
+            phoneNumber: formattedNumber
+        });
+
+    } catch (error) {
+        console.error('Error sending bib allocation message:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send bib allocation message',
+            error: error.message
+        });
+    }
+});
 
 // SSL Certificate Options
 const options = {
