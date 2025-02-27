@@ -36,7 +36,9 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         executablePath: '/usr/bin/chromium-browser',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--no-first-run'],
+        headless: true,
+        timeout: 60000 // Increase timeout to 60 seconds
     }
 });
 
